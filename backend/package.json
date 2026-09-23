@@ -1,0 +1,25 @@
+{
+  "name": "code-flow-backend",
+  "version": "1.0.0",
+  "description": "Code flow visualizer backend for Java and Ruby",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-java": "^0.21.0",
+    "tree-sitter-ruby": "^0.21.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "allowScripts": {
+    "tree-sitter@0.21.1": true,
+    "tree-sitter-java@0.21.0": true,
+    "tree-sitter-ruby@0.21.0": true
+  }
+}
