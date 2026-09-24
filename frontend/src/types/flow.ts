@@ -9,7 +9,7 @@ export type NodeType =
   | 'try' | 'catch' | 'finally'
   | 'case';
 
-export interface FlowNodeData {
+export interface FlowNodeData extends Record<string, unknown> {
   label: string;
   nodeType: NodeType;
   code?: string;

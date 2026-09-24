@@ -1,30 +1,27 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import ReactFlow, {
-  Background, Controls, MiniMap, Panel,
+import React, { useCallback, useEffect } from 'react';
+import {
+  ReactFlow, Background, BackgroundVariant,
+  Controls, MiniMap, Panel,
   useNodesState, useEdgesState, useReactFlow,
   type Node, type Edge,
-  MarkerType,
-} from 'reactflow';
+  MarkerType, ConnectionLineType,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
-import 'reactflow/dist/style.css';
 
-import { nodeTypes } from './CustomNodes';
+import { nodeTypes, type AppNode } from './CustomNodes';
 import type { AnalyzeResult, FlowNodeData } from '../types/flow';
 
 const NODE_W = 200;
-const NODE_H = 70;
+const NODE_H = 72;
 
-function applyDagreLayout(nodes: Node[], edges: Edge[]): Node[] {
+function applyDagreLayout(nodes: AppNode[], edges: Edge[]): AppNode[] {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'TB', ranksep: 70, nodesep: 40, marginx: 40, marginy: 40 });
+  g.setGraph({ rankdir: 'TB', ranksep: 80, nodesep: 55, marginx: 60, marginy: 60 });
 
-  for (const node of nodes) {
-    g.setNode(node.id, { width: NODE_W, height: NODE_H });
-  }
-  for (const edge of edges) {
-    g.setEdge(edge.source, edge.target);
-  }
+  for (const node of nodes) g.setNode(node.id, { width: NODE_W, height: NODE_H });
+  for (const edge of edges) g.setEdge(edge.source, edge.target);
 
   dagre.layout(g);
 
@@ -40,55 +37,70 @@ interface Props {
 }
 
 export default function FlowVisualizer({ result, onNodeClick }: Props) {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<AppNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { fitView } = useReactFlow();
 
   useEffect(() => {
     if (!result) { setNodes([]); setEdges([]); return; }
 
-    const rawEdges: Edge[] = result.edges.map(e => ({
-      ...e,
-      type: 'smoothstep',
-      style: {
-        stroke: e.label === 'true' ? '#22c55e'
-          : e.label === 'false' ? '#ef4444'
-          : e.label === 'exception' || e.label === 'rescue' ? '#f97316'
-          : '#4b5280',
-        strokeWidth: 2,
-      },
-      labelStyle: { fill: '#94a3b8', fontSize: 10, fontFamily: 'monospace' },
-      labelBgStyle: { fill: '#1a1d27', fillOpacity: 0.8 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: '#4b5280' },
-      animated: !!e.animated,
-    }));
+    const styledEdges: Edge[] = result.edges.map(e => {
+      const isLoop = !!e.animated;
+      const isFalse = e.label === 'false';
+      const isTrue = e.label === 'true';
+      const isException = e.label === 'exception' || e.label === 'rescue';
 
-    const laid = applyDagreLayout(result.nodes as Node[], rawEdges);
+      const color = isTrue ? '#22c55e'
+        : isFalse ? '#ef4444'
+        : isException ? '#fb923c'
+        : isLoop ? '#a855f7'
+        : '#4b5580';
+
+      return {
+        ...e,
+        type: isLoop ? 'smoothstep' : 'smoothstep',
+        animated: isLoop,
+        style: { stroke: color, strokeWidth: isLoop ? 1.5 : 2 },
+        labelStyle: { fill: color, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 },
+        labelBgStyle: { fill: '#0f1117', fillOpacity: 0.85, rx: 4 },
+        labelBgPadding: [4, 6] as [number, number],
+        markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color },
+      };
+    });
+
+    const rawNodes = result.nodes as unknown as AppNode[];
+    const laid = applyDagreLayout(rawNodes, styledEdges);
     setNodes(laid);
-    setEdges(rawEdges);
-
-    setTimeout(() => fitView({ padding: 0.15, duration: 400 }), 50);
+    setEdges(styledEdges);
+    setTimeout(() => fitView({ padding: 0.15, duration: 500 }), 80);
   }, [result]);
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    onNodeClick(node.data as FlowNodeData);
+    onNodeClick(node.data as unknown as FlowNodeData);
   }, [onNodeClick]);
-
-  const handlePaneClick = useCallback(() => onNodeClick(null), [onNodeClick]);
 
   if (!result) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 select-none">
-        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-          <rect x="8" y="24" width="20" height="16" rx="4" fill="#2d3148" stroke="#4b5280" strokeWidth="1.5"/>
-          <rect x="36" y="8" width="20" height="16" rx="4" fill="#2d3148" stroke="#4b5280" strokeWidth="1.5"/>
-          <rect x="36" y="40" width="20" height="16" rx="4" fill="#2d3148" stroke="#4b5280" strokeWidth="1.5"/>
-          <line x1="28" y1="32" x2="36" y2="16" stroke="#4b5280" strokeWidth="1.5"/>
-          <line x1="28" y1="32" x2="36" y2="48" stroke="#4b5280" strokeWidth="1.5"/>
-        </svg>
+      <div className="flex flex-col items-center justify-center h-full gap-5 select-none">
+        <div style={{ position: 'relative', width: 80, height: 80 }}>
+          <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+            {/* Animated glow ring */}
+            <circle cx="40" cy="40" r="36" stroke="#6366f120" strokeWidth="1" fill="none" />
+            {/* Nodes */}
+            <rect x="26" y="10" width="28" height="18" rx="6" fill="#312e81" stroke="#6366f1" strokeWidth="1.5"/>
+            <rect x="8" y="52" width="28" height="18" rx="6" fill="#1e2235" stroke="#475569" strokeWidth="1.5"/>
+            <rect x="44" y="52" width="28" height="18" rx="6" fill="#422006" stroke="#f59e0b" strokeWidth="1.5"/>
+            {/* Edges */}
+            <line x1="40" y1="28" x2="22" y2="52" stroke="#4b5580" strokeWidth="1.5"/>
+            <line x1="40" y1="28" x2="58" y2="52" stroke="#f59e0b" strokeWidth="1.5"/>
+            {/* Arrow heads */}
+            <polygon points="22,52 18,46 26,46" fill="#4b5580"/>
+            <polygon points="58,52 54,46 62,46" fill="#f59e0b"/>
+          </svg>
+        </div>
         <div className="text-center">
-          <p className="text-slate-400 text-sm font-medium">Paste code and click Analyze</p>
-          <p className="text-slate-600 text-xs mt-1">Flow graph will appear here</p>
+          <p className="text-slate-400 text-sm font-semibold">Paste your code and click Analyze</p>
+          <p className="text-slate-600 text-xs mt-1">Interactive flow graph will appear here</p>
         </div>
       </div>
     );
@@ -96,42 +108,64 @@ export default function FlowVisualizer({ result, onNodeClick }: Props) {
 
   return (
     <ReactFlow
-      nodes={nodes}
+      nodes={nodes as Node[]}
       edges={edges}
-      onNodesChange={onNodesChange}
+      onNodesChange={onNodesChange as Parameters<typeof ReactFlow>[0]['onNodesChange']}
       onEdgesChange={onEdgesChange}
       onNodeClick={handleNodeClick}
-      onPaneClick={handlePaneClick}
+      onPaneClick={() => onNodeClick(null)}
       nodeTypes={nodeTypes}
+      connectionLineType={ConnectionLineType.SmoothStep}
       fitView
-      minZoom={0.1}
-      maxZoom={2}
-      style={{ background: '#0f1117' }}
+      minZoom={0.08}
+      maxZoom={2.5}
+      style={{ background: '#0a0c14' }}
     >
-      <Background color="#1e2235" gap={20} size={1} />
-      <Controls />
+      <Background
+        variant={BackgroundVariant.Dots}
+        gap={24}
+        size={1.2}
+        color="#1e2235"
+      />
+      <Controls
+        style={{ background: '#1a1d27', border: '1px solid #2d3148', borderRadius: 10 }}
+      />
       <MiniMap
+        style={{ background: '#1a1d27', border: '1px solid #2d3148', borderRadius: 10 }}
         nodeColor={(n) => {
           const nt = (n.data as FlowNodeData)?.nodeType;
           const map: Record<string, string> = {
-            method: '#6366f1', start: '#22c55e', end: '#ef4444',
-            decision: '#f59e0b', switch: '#f59e0b', loop: '#f97316',
-            return: '#16a34a', throw: '#dc2626', call: '#818cf8',
-            try: '#7c3aed', catch: '#d97706', finally: '#3b82f6',
+            method: '#6366f1', start: '#22c55e', end: '#f43f5e',
+            decision: '#f59e0b', switch: '#f59e0b', loop: '#fb923c',
+            return: '#2dd4bf', throw: '#ef4444', call: '#8b5cf6',
+            try: '#a855f7', catch: '#eab308', finally: '#60a5fa',
           };
-          return map[nt] || '#3d4460';
+          return map[nt] || '#334155';
         }}
-        maskColor="#0f111788"
+        maskColor="#0a0c1488"
+        pannable
+        zoomable
       />
+
+      {/* Legend */}
       <Panel position="bottom-center">
-        <div className="flex items-center gap-4 px-4 py-2 rounded-full text-[10px] text-slate-500"
-          style={{ background: '#1a1d2799', border: '1px solid #2d3148' }}>
-          <span className="flex items-center gap-1"><span style={{color:'#22c55e'}}>●</span> Start/End</span>
-          <span className="flex items-center gap-1"><span style={{color:'#6366f1'}}>●</span> Method</span>
-          <span className="flex items-center gap-1"><span style={{color:'#f59e0b'}}>◇</span> Decision</span>
-          <span className="flex items-center gap-1"><span style={{color:'#f97316'}}>●</span> Loop</span>
-          <span className="flex items-center gap-1"><span style={{color:'#818cf8'}}>●</span> Call</span>
-          <span className="flex items-center gap-1"><span style={{color:'#dc2626'}}>●</span> Throw/Return</span>
+        <div className="flex items-center gap-3 px-5 py-2.5 text-[10px] font-medium"
+          style={{ background: '#1a1d27cc', border: '1px solid #2d3148', borderRadius: 999, backdropFilter: 'blur(8px)', color: '#64748b' }}>
+          {[
+            { color: '#22c55e', label: 'Start/End' },
+            { color: '#6366f1', label: 'Method' },
+            { color: '#f59e0b', label: 'Decision' },
+            { color: '#fb923c', label: 'Loop' },
+            { color: '#8b5cf6', label: 'Call' },
+            { color: '#2dd4bf', label: 'Return' },
+            { color: '#ef4444', label: 'Throw' },
+            { color: '#a855f7', label: 'Try/Catch' },
+          ].map(({ color, label }) => (
+            <span key={label} className="flex items-center gap-1.5">
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />
+              {label}
+            </span>
+          ))}
         </div>
       </Panel>
     </ReactFlow>

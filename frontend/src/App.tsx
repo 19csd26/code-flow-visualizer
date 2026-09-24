@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useRef } from 'react';
-import Editor, { type Monaco } from '@monaco-editor/react';
-import { ReactFlowProvider } from 'reactflow';
+import Editor from '@monaco-editor/react';
+import { ReactFlowProvider } from '@xyflow/react';
 import {
-  GitBranch, Play, Zap, AlertCircle, Loader2,
-  ChevronDown, Code2, Activity,
+  GitBranch, Zap, AlertCircle, Loader2,
+  Code2, Activity,
 } from 'lucide-react';
 
 import FlowVisualizer from './components/FlowVisualizer';
