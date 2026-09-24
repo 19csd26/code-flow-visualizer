@@ -62,9 +62,8 @@ Runs your Ruby code via `TracePoint` and records every line, call, and return:
 | Frontend | React 18 + Vite + TypeScript + Tailwind CSS |
 | Graph | **@xyflow/react v12** (React Flow) + dagre auto-layout |
 | Code editor | Monaco Editor (same engine as VS Code) |
-| Backend | Node.js + Express |
-| Parsing | **tree-sitter** with native Java + Ruby grammars |
-| Ruby execution | `TracePoint` API via sandboxed child process |
+| Parsing | **web-tree-sitter** (WASM) — runs entirely in the browser, no backend needed |
+| Ruby execution | `TracePoint` API via optional Node.js backend (for Step Trace only) |
 
 ---
 
@@ -73,27 +72,37 @@ Runs your Ruby code via `TracePoint` and records every line, call, and return:
 ### Prerequisites
 
 - **Node.js 18+** — [nodejs.org](https://nodejs.org)
-- **Ruby** — for the Step Trace feature (`ruby --version`)
-- **Python 3 + node-gyp** — for tree-sitter native module compilation
+- **Ruby** *(optional)* — only needed for the Step Trace feature
+
+> Parsing runs entirely in-browser via WebAssembly. No native compilation, no backend required for the core flow graph and simulation features.
 
 ### Install
 
 ```bash
 git clone https://github.com/19csd26/code-flow-visualizer.git
-cd code-flow-visualizer
-npm run install:all
+cd code-flow-visualizer/frontend
+npm install
 ```
 
-### Run
+### Run (frontend only — no backend needed)
 
 ```bash
+cd frontend
 npm run dev
+```
+
+Open **http://localhost:5173** — that's it.
+
+### Run with Step Trace (Ruby trace feature)
+
+```bash
+npm run dev   # starts both frontend + backend
 ```
 
 | Service | URL |
 |---------|-----|
 | App (frontend) | http://localhost:5173 |
-| API (backend)  | http://localhost:3001 |
+| API (backend, optional) | http://localhost:3001 |
 
 ---
 
@@ -298,6 +307,20 @@ public class MatrixUtils {
     }
 }
 ```
+
+---
+
+## Deploy for Free (Vercel — one click)
+
+This project is fully static — no server required for the core features.
+
+1. Push this repo to GitHub
+2. Go to [vercel.com](https://vercel.com) → **Add New Project** → import your repo
+3. Vercel auto-detects `vercel.json` — just click **Deploy**
+
+That's it. The WASM grammar files in `public/wasm/` are served as static assets.
+
+> **Optional:** deploy the `backend/` folder on [Render](https://render.com) (free tier) to enable the Ruby Step Trace feature. Set `BACKEND_URL` env var in Vercel if needed.
 
 ---
 

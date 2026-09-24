@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { Edge } from '@xyflow/react';
@@ -12,6 +12,7 @@ import NodeDetail from './components/NodeDetail';
 import TracePlayer from './components/TracePlayer';
 import SimulationPanel from './components/SimulationPanel';
 import { analyzeCode, traceCode } from './services/api';
+import { initTreeSitter } from './lib/treeSitter';
 import { useSimulation } from './hooks/useSimulation';
 import type { AppNode } from './components/CustomNodes';
 import type { Language, AnalyzeResult, TraceResult, FlowNodeData, TraceStep } from './types/flow';
@@ -94,6 +95,14 @@ export default function App() {
 
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
+  const [parserReady, setParserReady] = useState(false);
+
+  // Initialize web-tree-sitter WASM on first mount
+  useEffect(() => {
+    initTreeSitter()
+      .then(() => setParserReady(true))
+      .catch(e => setError(`Failed to load parser: ${e.message}`));
+  }, []);
 
   // Laid-out nodes/edges (set by FlowVisualizer after dagre runs)
   const [layoutNodes, setLayoutNodes] = useState<AppNode[]>([]);
@@ -213,11 +222,11 @@ export default function App() {
           </div>
 
           {/* Analyze */}
-          <button onClick={handleAnalyze} disabled={loading}
+          <button onClick={handleAnalyze} disabled={loading || !parserReady}
             className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold text-white transition-all"
-            style={{ background: loading ? '#3730a3' : '#4f46e5' }}>
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-            Analyze
+            style={{ background: loading || !parserReady ? '#3730a3' : '#4f46e5' }}>
+            {loading || !parserReady ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+            {!parserReady ? 'Loading…' : 'Analyze'}
           </button>
 
           {/* Quick-simulate shortcut */}

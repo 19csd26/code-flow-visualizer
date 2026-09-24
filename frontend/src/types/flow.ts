@@ -32,6 +32,6 @@ export interface TraceResult {
 
 export interface AnalyzeResult {
   nodes: { id: string; type: string; data: FlowNodeData; position: { x: number; y: number } }[];
-  edges: { id: string; source: string; target: string; label: string; animated: boolean }[];
+  edges: { id: string; source: string; target: string; label: string; animated: boolean; markerEnd?: unknown }[];
   language: Language;
 }
