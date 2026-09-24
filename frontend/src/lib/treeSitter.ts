@@ -1,4 +1,6 @@
-import { Parser, Language } from 'web-tree-sitter';
+import Parser from 'web-tree-sitter';
+
+type Language = Parser.Language;
 
 let ready = false;
 let javaLang: Language | null = null;
@@ -12,8 +14,8 @@ export async function initTreeSitter(): Promise<void> {
   });
 
   [javaLang, rubyLang] = await Promise.all([
-    Language.load('/wasm/tree-sitter-java.wasm'),
-    Language.load('/wasm/tree-sitter-ruby.wasm'),
+    Parser.Language.load('/wasm/tree-sitter-java.wasm'),
+    Parser.Language.load('/wasm/tree-sitter-ruby.wasm'),
   ]);
 
   ready = true;

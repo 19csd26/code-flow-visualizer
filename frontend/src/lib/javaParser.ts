@@ -1,8 +1,8 @@
-import { type Node } from 'web-tree-sitter';
+import Parser from 'web-tree-sitter';
 import type { AnalyzeResult, NodeType } from '../types/flow';
 import { makeParser } from './treeSitter';
 
-type SNode = Node;
+type SNode = Parser.SyntaxNode;
 
 class JavaCFGBuilder {
   private nodes: AnalyzeResult['nodes'] = [];
