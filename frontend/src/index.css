@@ -50,6 +50,25 @@ body {
   border-radius: 8px;
 }
 
+/* Simulation active node pulse */
+@keyframes sim-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px #ffffff44, 0 0 20px #ffffff22, 0 0 40px #ffffff11;
+    outline: 2px solid #ffffffaa;
+    outline-offset: 3px;
+  }
+  50% {
+    box-shadow: 0 0 0 6px #ffffff22, 0 0 30px #ffffff33, 0 0 60px #ffffff16;
+    outline: 2px solid #ffffff66;
+    outline-offset: 6px;
+  }
+}
+
+.react-flow__node.sim-active > div {
+  animation: sim-pulse 0.9s ease-in-out infinite;
+  border-radius: 8px;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

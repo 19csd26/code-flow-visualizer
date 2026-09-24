@@ -1,16 +1,20 @@
 import React, { useState, useCallback, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { ReactFlowProvider } from '@xyflow/react';
+import type { Edge } from '@xyflow/react';
 import {
   GitBranch, Zap, AlertCircle, Loader2,
-  Code2, Activity,
+  Code2, Activity, Play,
 } from 'lucide-react';
 
 import FlowVisualizer from './components/FlowVisualizer';
 import NodeDetail from './components/NodeDetail';
 import TracePlayer from './components/TracePlayer';
+import SimulationPanel from './components/SimulationPanel';
 import { analyzeCode, traceCode } from './services/api';
-import type { Language, AnalyzeResult, TraceResult, FlowNodeData } from './types/flow';
+import { useSimulation } from './hooks/useSimulation';
+import type { AppNode } from './components/CustomNodes';
+import type { Language, AnalyzeResult, TraceResult, FlowNodeData, TraceStep } from './types/flow';
 
 const JAVA_SAMPLE = `public class BinarySearch {
     public static int search(int[] arr, int target) {
@@ -77,30 +81,40 @@ const LANGS: { value: Language; label: string; icon: string }[] = [
   { value: 'ruby', label: 'Ruby', icon: '💎' },
 ];
 
-type Tab = 'flow' | 'trace';
+type Tab = 'flow' | 'simulate' | 'trace';
 
 export default function App() {
-  const [language, setLanguage] = useState<Language>('java');
-  const [code, setCode] = useState(JAVA_SAMPLE);
-  const [tab, setTab] = useState<Tab>('flow');
+  const [language, setLanguage]       = useState<Language>('java');
+  const [code, setCode]               = useState(JAVA_SAMPLE);
+  const [tab, setTab]                 = useState<Tab>('flow');
 
-  const [flowResult, setFlowResult] = useState<AnalyzeResult | null>(null);
+  const [flowResult, setFlowResult]   = useState<AnalyzeResult | null>(null);
   const [traceResult, setTraceResult] = useState<TraceResult | null>(null);
   const [selectedNode, setSelectedNode] = useState<FlowNodeData | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [highlightedLine, setHighlightedLine] = useState<number | null>(null);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+
+  // Laid-out nodes/edges (set by FlowVisualizer after dagre runs)
+  const [layoutNodes, setLayoutNodes] = useState<AppNode[]>([]);
+  const [layoutEdges, setLayoutEdges] = useState<Edge[]>([]);
 
   const editorRef = useRef<Parameters<NonNullable<React.ComponentProps<typeof Editor>['onMount']>>[0] | null>(null);
   const decorationsRef = useRef<string[]>([]);
+
+  // Simulation hook — wired to the laid-out graph + optional Ruby trace
+  const sim = useSimulation(
+    layoutNodes,
+    layoutEdges,
+    traceResult?.steps as TraceStep[] | undefined
+  );
 
   function handleEditorMount(editor: Parameters<NonNullable<React.ComponentProps<typeof Editor>['onMount']>>[0]) {
     editorRef.current = editor;
   }
 
+  // Highlight active line in Monaco when simulation is running
   const highlightLine = useCallback((line: number | null) => {
-    setHighlightedLine(line);
     const editor = editorRef.current;
     if (!editor) return;
     const newDecs = line
@@ -109,11 +123,19 @@ export default function App() {
     decorationsRef.current = editor.deltaDecorations(decorationsRef.current, newDecs);
   }, []);
 
+  // Highlight line in editor whenever simulation advances
+  const prevLine = useRef<number | null>(null);
+  if (sim.steps[sim.current]?.line !== prevLine.current) {
+    prevLine.current = sim.steps[sim.current]?.line ?? null;
+    highlightLine(prevLine.current);
+  }
+
   async function handleAnalyze() {
     if (!code.trim()) return;
     setLoading(true);
     setError(null);
     setSelectedNode(null);
+    sim.reset();
     try {
       const result = await analyzeCode(code, language);
       setFlowResult(result);
@@ -147,10 +169,25 @@ export default function App() {
     setTraceResult(null);
     setError(null);
     setSelectedNode(null);
+    setLayoutNodes([]);
+    setLayoutEdges([]);
+    sim.reset();
   }
+
+  const handleLayoutReady = useCallback((nodes: AppNode[], edges: Edge[]) => {
+    setLayoutNodes(nodes);
+    setLayoutEdges(edges);
+  }, []);
+
+  const TABS: { id: Tab; label: string; hidden?: boolean }[] = [
+    { id: 'flow',     label: '⚡ Flow Graph' },
+    { id: 'simulate', label: '▶ Simulate', hidden: !flowResult },
+    { id: 'trace',    label: '🔍 Step Trace', hidden: language !== 'ruby' },
+  ];
 
   return (
     <div className="flex flex-col h-screen" style={{ background: '#0f1117' }}>
+
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-3 shrink-0"
         style={{ background: '#1a1d27', borderBottom: '1px solid #2d3148' }}>
@@ -167,41 +204,40 @@ export default function App() {
           {/* Language picker */}
           <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #2d3148' }}>
             {LANGS.map(l => (
-              <button
-                key={l.value}
-                onClick={() => handleLangChange(l.value)}
+              <button key={l.value} onClick={() => handleLangChange(l.value)}
                 className="px-3 py-1.5 text-sm font-medium transition-colors"
-                style={{
-                  background: language === l.value ? '#312e81' : 'transparent',
-                  color: language === l.value ? '#c7d2fe' : '#64748b',
-                }}
-              >
+                style={{ background: language === l.value ? '#312e81' : 'transparent', color: language === l.value ? '#c7d2fe' : '#64748b' }}>
                 {l.icon} {l.label}
               </button>
             ))}
           </div>
 
           {/* Analyze */}
-          <button
-            onClick={handleAnalyze}
-            disabled={loading}
+          <button onClick={handleAnalyze} disabled={loading}
             className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold text-white transition-all"
-            style={{ background: loading ? '#3730a3' : '#4f46e5' }}
-          >
-            {loading && tab === 'flow' ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-            Analyze Flow
+            style={{ background: loading ? '#3730a3' : '#4f46e5' }}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+            Analyze
           </button>
 
-          {/* Trace (Ruby only) */}
-          {language === 'ruby' && (
+          {/* Quick-simulate shortcut */}
+          {flowResult && (
             <button
-              onClick={handleTrace}
-              disabled={loading}
+              onClick={() => { setTab('simulate'); setTimeout(() => sim.play(), 100); }}
               className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
-              style={{ background: '#1e1b4b', color: '#a5b4fc', border: '1px solid #4338ca' }}
-            >
-              {loading && tab === 'trace' ? <Loader2 size={14} className="animate-spin" /> : <Activity size={14} />}
-              Step Trace
+              style={{ background: '#14532d', color: '#86efac', border: '1px solid #166534' }}>
+              <Play size={14} />
+              Simulate
+            </button>
+          )}
+
+          {/* Ruby trace */}
+          {language === 'ruby' && (
+            <button onClick={handleTrace} disabled={loading}
+              className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
+              style={{ background: '#1e1b4b', color: '#a5b4fc', border: '1px solid #4338ca' }}>
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <Activity size={14} />}
+              Trace
             </button>
           )}
         </div>
@@ -211,15 +247,15 @@ export default function App() {
       {error && (
         <div className="flex items-center gap-2 px-5 py-2 text-sm text-red-300 shrink-0"
           style={{ background: '#450a0a', borderBottom: '1px solid #7f1d1d' }}>
-          <AlertCircle size={14} />
-          {error}
+          <AlertCircle size={14} /> {error}
         </div>
       )}
 
       {/* Main layout */}
       <div className="flex flex-1 overflow-hidden">
+
         {/* Code editor pane */}
-        <div className="flex flex-col w-1/2 shrink-0" style={{ borderRight: '1px solid #2d3148' }}>
+        <div className="flex flex-col shrink-0" style={{ width: '42%', borderRight: '1px solid #2d3148' }}>
           <div className="flex items-center gap-2 px-4 py-2 shrink-0"
             style={{ background: '#1a1d27', borderBottom: '1px solid #2d3148' }}>
             <Code2 size={14} className="text-slate-500" />
@@ -252,54 +288,66 @@ export default function App() {
 
         {/* Right pane */}
         <div className="flex flex-col flex-1 overflow-hidden">
+
           {/* Tab bar */}
-          <div className="flex items-center shrink-0" style={{ background: '#1a1d27', borderBottom: '1px solid #2d3148' }}>
-            {(['flow', 'trace'] as Tab[]).map(t => (
-              (t === 'trace' && language !== 'ruby') ? null : (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className="px-5 py-2.5 text-xs font-semibold capitalize transition-colors"
-                  style={{
-                    color: tab === t ? '#c7d2fe' : '#64748b',
-                    borderBottom: tab === t ? '2px solid #6366f1' : '2px solid transparent',
-                  }}
-                >
-                  {t === 'flow' ? '⚡ Flow Graph' : '▶ Step Trace'}
-                </button>
-              )
+          <div className="flex items-center shrink-0"
+            style={{ background: '#1a1d27', borderBottom: '1px solid #2d3148' }}>
+            {TABS.filter(t => !t.hidden).map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className="px-5 py-2.5 text-xs font-semibold transition-colors"
+                style={{
+                  color: tab === t.id ? '#c7d2fe' : '#64748b',
+                  borderBottom: tab === t.id ? '2px solid #6366f1' : '2px solid transparent',
+                }}>
+                {t.label}
+              </button>
             ))}
-            {flowResult && tab === 'flow' && (
+            {/* Node/edge counts */}
+            {flowResult && (
               <span className="ml-auto mr-4 text-[10px] text-slate-600 font-mono">
                 {flowResult.nodes.length} nodes · {flowResult.edges.length} edges
-              </span>
-            )}
-            {traceResult && tab === 'trace' && (
-              <span className="ml-auto mr-4 text-[10px] text-slate-600 font-mono">
-                {traceResult.total} steps{traceResult.total >= 500 ? ' (capped)' : ''}
               </span>
             )}
           </div>
 
           {/* Tab content */}
-          <div className="flex-1 overflow-hidden relative">
-            {tab === 'flow' && (
+          <div className="flex flex-1 overflow-hidden">
+
+            {/* Flow graph (always mounted to keep layout state) */}
+            <div className={`flex-1 relative overflow-hidden ${tab !== 'flow' && tab !== 'simulate' ? 'hidden' : ''}`}>
               <ReactFlowProvider>
-                <FlowVisualizer result={flowResult} onNodeClick={setSelectedNode} />
-                <NodeDetail data={selectedNode} onClose={() => setSelectedNode(null)} />
+                <FlowVisualizer
+                  result={flowResult}
+                  onNodeClick={setSelectedNode}
+                  activeNodeId={tab === 'simulate' ? sim.activeNodeId : null}
+                  onLayoutReady={handleLayoutReady}
+                />
+                {tab === 'flow' && <NodeDetail data={selectedNode} onClose={() => setSelectedNode(null)} />}
               </ReactFlowProvider>
+            </div>
+
+            {/* Simulation side panel */}
+            {tab === 'simulate' && (
+              <div className="w-72 shrink-0 overflow-hidden flex flex-col"
+                style={{ borderLeft: '1px solid #2d3148' }}>
+                <SimulationPanel sim={sim} />
+              </div>
             )}
 
+            {/* Ruby step trace */}
             {tab === 'trace' && (
-              traceResult ? (
-                <TracePlayer steps={traceResult.steps} highlightLine={highlightLine} />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
-                  <Activity size={32} className="text-slate-700" />
-                  <p className="text-sm">Click <strong className="text-slate-400">Step Trace</strong> to run your Ruby code step-by-step</p>
-                </div>
-              )
+              <div className="flex-1 overflow-hidden">
+                {traceResult ? (
+                  <TracePlayer steps={traceResult.steps} highlightLine={highlightLine} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
+                    <Activity size={32} className="text-slate-700" />
+                    <p className="text-sm">Click <strong className="text-slate-400">Trace</strong> to run your Ruby code step-by-step</p>
+                  </div>
+                )}
+              </div>
             )}
+
           </div>
         </div>
       </div>
